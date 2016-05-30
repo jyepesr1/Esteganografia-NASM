@@ -20,6 +20,27 @@ strLen:
 ;   jmp errorParams
 
 
+char2Bin:
+   mov ecx,7
+   mov edx,edi ; Guardo la posición inicial del buffer
+
+   .nextBit:
+      shl bl,1
+      setc byte[edi]
+      add byte[edi],'0'
+      inc edi
+      dec ecx
+      jns .nextBit
+
+
+   mov eax,edi
+   sub eax,edx
+   inc eax
+   ret
+
+
+
+
 
 errorParams:
    mov eax,4 ; Servicio sys_write() Imprimimos el Mensaje de Error

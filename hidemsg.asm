@@ -37,12 +37,15 @@ section .bss
 stat              resb  sizeof(STAT)
 image             resb  5242880 ; 5MB
 imageName         resb  1024
-imageLen          resb  1024 ; 5MB
+imageLen          resb  1024
 outFileName       resb  1024
 message           resb  1024
 messageLen        resb  1024
 fd_in             resb  1
 fd_out            resb  1
+binary            resb  1
+binaryLen         resb  1024
+count             resb  1
 
 
 section .text
@@ -63,6 +66,15 @@ mensaje:
    mov [message],eax ; Guardo el mensaje en message
    call strLen ; obtengo el tamaño del mensaje
    mov [messageLen],eax
+
+   ;add byte[messageLen],'0'
+
+   ;mov eax,4
+   ;mov ebx,1
+   ;mov ecx,messageLen
+   ;mov edx,1
+   ;int 80h
+   ;jmp exit
 
 
 parameter1:
@@ -89,7 +101,9 @@ parameter2:
    mov ecx,stat
    int 80h
 
-   mov eax,[stat + STAT.st_size] ; El tamaño del archivo lo podemos hallar accediendo al star mas un offset de 20, pero por legibilidad lo hacemos así
+   mov eax,[stat + STAT.st_size] ; El tamaño del archivo lo podemos hallar
+                                 ;accediendo al stat mas un offset de 20,
+                                 ;pero por legibilidad lo hacemos así
    mov [imageLen],eax
 
 
@@ -128,6 +142,40 @@ parameter4:
    mov eax,6 ; sys_close()
    mov ebx,[fd_in]
    int 80h
+
+
+
+mov esi,[message]
+changeBits:
+   cmp byte[esi],0
+   je exit
+
+   mov bl,byte[esi]
+   mov edi,binary
+   call char2Bin
+
+   mov eax,4
+   mov ebx,1
+   mov ecx,binary
+   mov edx,8
+   int 80h
+
+   inc esi
+   jmp changeBits
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
    mov eax,8  ; sys_create()
    mov ebx,[outFileName]
