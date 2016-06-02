@@ -43,9 +43,11 @@ message           resb  1024
 messageLen        resb  1024
 fd_in             resb  1
 fd_out            resb  1
-binary            resb  1
-binaryLen         resb  1024
-count             resb  1
+binary            resb  1024 ; Buffer para almacenar el char en binario
+binaryLen         resb  2    ; tamaño del buffer del binario
+header            resb  20   ; buffer para almacenar el header de la img
+headerLen         resb  2    ; tamaño del buffer del header
+bodyLen           resb  2    ; tamaño de la img sin el header
 
 
 section .text
@@ -143,41 +145,115 @@ parameter4:
    mov ebx,[fd_in]
    int 80h
 
+   ;mov eax,4
+   ;mov ebx,1
+   ;mov ecx,image
+   ;mov edx,5
+   ;int 80h
+   ;jmp exit
 
 
 mov esi,[message]
-changeBits:
+mov edi,binary
+
+convert2Bits:
    cmp byte[esi],0
-   je exit
+   je getHeader
 
    mov bl,byte[esi]
-   mov edi,binary
    call char2Bin
+
+   inc esi
+   inc edi
+   jmp convert2Bits
+
+
+
+getHeader:
+
+   mov ecx,image
+   mov esi,0
+   mov edx,0
+   .loop:
+      cmp byte[ecx],10
+      je .linefeed
+
+      inc ecx
+      inc edx
+      jmp .loop
+
+   .linefeed:
+      inc esi
+      inc edx
+      cmp esi,3
+      je .finished
+      inc ecx
+      jmp .loop
+
+   .finished:
+      mov [headerLen],edx
+
+changeImage:
+
+   mov esi,image
+   add esi,[headerLen]
+
+;   mov eax,4
+ ;  mov ebx,1
+  ; mov ecx,esi
+  ; mov edx,1
+  ; int 80h
+  ; jmp exit
+
+   ;mov edi,[message + ecx]
+   mov edx,binary
+
+   .loopImage:
+      cmp byte[edx],10
+      je createFile
+
+      mov bl,byte[esi]
+      shr bl,1
+      jc .one
+      jmp .zero
+
+
+      .one:
+         cmp byte[edx],1
+         je .equal
+         and byte[esi],254 ;11111110
+         jmp .loopImage
+
+
+      .zero:
+         cmp byte[edx],0
+         je .equal
+         or byte[esi],1 ;00000001
+         jmp .loopImage
+
+
+      .equal:
+         inc edx
+         inc esi
+         jmp .loopImage
+
+
+
+print:
+   mov eax,[imageLen]
+   mov ebx,8
+   mul ebx
+   mov edx,eax
 
    mov eax,4
    mov ebx,1
    mov ecx,binary
-   mov edx,8
    int 80h
 
-   inc esi
-   jmp changeBits
 
+createFile:
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-   mov eax,8  ; sys_create()
+   mov eax,8  ; sys_creat()
    mov ebx,[outFileName]
    mov ecx,0420 ; 644 octal -rw-r--r--
    int 80h

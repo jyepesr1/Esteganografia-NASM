@@ -27,11 +27,12 @@ char2Bin:
    .nextBit:
       shl bl,1
       setc byte[edi]
-      add byte[edi],'0'
+      ;add byte[edi],'0'
       inc edi
       dec ecx
       jns .nextBit
 
+   mov byte [edi], 10
 
    mov eax,edi
    sub eax,edx
