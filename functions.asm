@@ -27,19 +27,11 @@ char2Bin:
    .nextBit:
       shl bl,1
       setc byte[edi]
-      ;add byte[edi],'0'
+     ;add byte[edi],'0'
       inc edi
       dec ecx
       jns .nextBit
-
-   mov byte [edi], 10
-
-   mov eax,edi
-   sub eax,edx
-   inc eax
    ret
-
-
 
 
 
@@ -48,6 +40,24 @@ errorParams:
    mov ebx,1 ; STDOUT - consola
    mov ecx,MSGError1
    mov edx,MSGError1Len
+   int 80h
+   jmp exit ; acabamos el programa
+
+
+errorOpeningFile:
+   mov eax,4 ; Servicio sys_write() Imprimimos el Mensaje de Error
+   mov ebx,1 ; STDOUT - consola
+   mov ecx,MSGError2
+   mov edx,MSGError2Len
+   int 80h
+   jmp exit ; acabamos el programa
+
+
+errorReadingFile:
+   mov eax,4 ; Servicio sys_write() Imprimimos el Mensaje de Error
+   mov ebx,1 ; STDOUT - consola
+   mov ecx,MSGError3
+   mov edx,MSGError3Len
    int 80h
    jmp exit ; acabamos el programa
 

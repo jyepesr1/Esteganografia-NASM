@@ -29,8 +29,11 @@ numArgs           equ   6
 MSGError1         db    "Error el modo de uso es hidemsg 'mensaje' –f ARCHIVO.in –o \
 ARCHIVO.out",0xa ; 0xa es salto de línea, 10 en ASCII decimal
 MSGError1Len      equ   $ - MSGError1  ; tamaño del mensaje
-flag1             db    "-f"
-flag1Len          equ   $ - flag1
+MSGError2         db    "Error abriendo el archivo de entrada, por favor revise la \
+ruta y nombre de este.",0xa
+MSGError2Len      equ   $ - MSGError2  ; tamaño del mensaje
+MSGError3         db    "Error leyendo el archivo de entrada, por revise si dicho archivo.",0xa
+MSGError3Len      equ   $ - MSGError3  ; tamaño del mensaje
 
 section .bss
 
@@ -69,14 +72,8 @@ mensaje:
    call strLen ; obtengo el tamaño del mensaje
    mov [messageLen],eax
 
-   ;add byte[messageLen],'0'
-
-   ;mov eax,4
-   ;mov ebx,1
-   ;mov ecx,messageLen
-   ;mov edx,1
-   ;int 80h
-   ;jmp exit
+   cmp byte[messageLen],0
+   je errorParams
 
 
 parameter1:
@@ -102,6 +99,7 @@ parameter2:
    mov ebx,[imageName]
    mov ecx,stat
    int 80h
+
 
    mov eax,[stat + STAT.st_size] ; El tamaño del archivo lo podemos hallar
                                  ;accediendo al stat mas un offset de 20,
@@ -133,6 +131,10 @@ parameter4:
    mov edx,0777 ; Permisos de lectura, escritura y ejecución para todos rwx
    int 80h
 
+   test eax,eax
+   js errorOpeningFile
+
+
    mov [fd_in],eax ; Guardo el Descriptor de Archivos para leer de él
 
    mov eax,3 ; sys_read()
@@ -141,114 +143,93 @@ parameter4:
    mov edx,[imageLen] ; la cantidad de bytes que necesitamos
    int 80h
 
+   test eax,eax
+   js errorReadingFile
+
+
    mov eax,6 ; sys_close()
    mov ebx,[fd_in]
    int 80h
 
-   ;mov eax,4
-   ;mov ebx,1
-   ;mov ecx,image
-   ;mov edx,5
-   ;int 80h
-   ;jmp exit
-
 
 mov esi,[message]
 mov edi,binary
-
+mov eax,edi
 convert2Bits:
-   cmp byte[esi],0
-   je getHeader
+   cmp byte[esi],0 ; Comparo con 0 para saber si llegue al final del mensaje
+   je .finishedConvert
 
-   mov bl,byte[esi]
+   mov bl,byte[esi] ; mueve un byte a bl para operar sobre este con shl
    call char2Bin
 
-   inc esi
-   inc edi
+   inc esi ; obtengo el siguiente caracter del mensaje
    jmp convert2Bits
 
+   .finishedConvert:
+      sub edi,eax ; Realizo una resta para conocer el tamaño final de la cadena de bits
+      mov [binaryLen],edi
 
 
 getHeader:
 
    mov ecx,image
-   mov esi,0
-   mov edx,0
+   mov esi,0  ; ESI es usado para llevar la cantidad de "Fin de líneas" encontrados
+   mov edx,0  ; EDX es usado para al final saber el tamaño del Header
    .loop:
-      cmp byte[ecx],10
+      cmp byte[ecx],10 ; Comparo con 10 para saber si he encontrado un "Fin de Línea"
       je .linefeed
 
-      inc ecx
-      inc edx
+      inc ecx   ; Obtengo el siguiente caracter
+      inc edx   ; Incremento el tamaño
       jmp .loop
 
    .linefeed:
-      inc esi
-      inc edx
-      cmp esi,3
+      inc esi   ; Incremento la cantidad de "Fin de Líneas" encontrados
+      inc edx   ; Incremento el tamaño
+      cmp esi,3 ; Comparo para saber si he encontrado 3 "Fin de Línea" y así sé que el Header acaba
       je .finished
       inc ecx
       jmp .loop
 
    .finished:
-      mov [headerLen],edx
+      mov [headerLen],edx ; Muevo el tamaño final del Header a la variable
+
 
 changeImage:
 
-   mov esi,image
+   mov esi,image  ; Muevo la imagen a ESI para manipularla
    add esi,[headerLen]
 
-;   mov eax,4
- ;  mov ebx,1
-  ; mov ecx,esi
-  ; mov edx,1
-  ; int 80h
-  ; jmp exit
-
-   ;mov edi,[message + ecx]
-   mov edx,binary
+   mov ecx,[binaryLen]
+   mov edx,binary  ; Muevo la cadena binaria del mensaje a EDX
 
    .loopImage:
-      cmp byte[edx],10
-      je createFile
 
-      mov bl,byte[esi]
-      shr bl,1
-      jc .one
+      mov bl,byte[esi]  ; Muevo a bl cada byte del mensaje para manipularlo
+      shr bl,1          ; Realizo un shift para conocer el valor del LSB
+      jc .one           ; Si el LSB es 1 la flag de carry se enciende y salto
       jmp .zero
 
-
       .one:
-         cmp byte[edx],1
-         je .equal
-         and byte[esi],254 ;11111110
-         jmp .loopImage
+         cmp byte[edx],1   ; Comparo para saber que valor hay en la cadena de bits
+         je .inc
+         and byte[esi],254 ; Realizo un AND lógico con 11111110 para colocar en 0 el LSB del byte actual
+         jmp .inc
 
 
       .zero:
-         cmp byte[edx],0
-         je .equal
-         or byte[esi],1 ;00000001
-         jmp .loopImage
+         cmp byte[edx],0   ; Comparo para saber que valor hay en la cadena de bits
+         je .inc
+         or byte[esi],1    ; Realizo un OR lógico con 00000001 para colocar en 1 el LSB del byte actual
+         jmp .inc
 
 
-      .equal:
-         inc edx
-         inc esi
-         jmp .loopImage
-
-
-
-print:
-   mov eax,[imageLen]
-   mov ebx,8
-   mul ebx
-   mov edx,eax
-
-   mov eax,4
-   mov ebx,1
-   mov ecx,binary
-   int 80h
+      .inc:
+         inc edx  ; Obtengo el siguiente bit de la cadena de binarios de mi mensaje
+         inc esi  ; Obtengo el siguiente byte de la imagen
+         dec ecx  ; Decremento el tamaño de la cadena para saber cuanto he recorrido
+         jnz .loopImage
+         jmp createFile
 
 
 createFile:
@@ -269,7 +250,6 @@ createFile:
    mov eax,6 ; sys_close()
    mov ebx,[fd_out]
    int 80h
-
 
    jmp exit
 
