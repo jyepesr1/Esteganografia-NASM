@@ -34,16 +34,17 @@ MSGError3         db    "Error, leyendo el archivo de entrada, por revise si dic
 MSGError3Len      equ   $ - MSGError3  ; tamaño del mensaje
 MSGError4         db    "Error, el formato de la imagen de entrada no es P6",0xa
 MSGError4Len      equ   $ - MSGError4
+one               times 8 db 1
+
 section .bss
 
-;stat              resb  sizeof(STAT)
 stat              resb  64
 image             resb  5242880 ; 5MB
+imageWithoutHeader resb 5242880 ; 5MB
 imageName         resb  1024
 imageLen          resb  1024
 outFileName       resb  1024
 message           resb  1024
-messageLen        resb  2
 fd_in             resb  1
 fd_out            resb  1
 binary            resb  1024 ; Buffer para almacenar el char en binario
@@ -51,7 +52,7 @@ binaryLen         resb  2    ; tamaño del buffer del binario
 header            resb  512   ; buffer para almacenar el header de la img
 headerLen         resb  2    ; tamaño del buffer del header
 bodyLen           resb  2    ; tamaño de la img sin el header
-
+messageLen        resb  2
 
 section .text
    global _start
@@ -206,36 +207,29 @@ changeImage:
    mov esi,image  ; Muevo la imagen a ESI para manipularla
    add esi,[headerLen]
 
-   mov ecx,[binaryLen]
+   mov ecx,[messageLen]
    mov edx,binary  ; Muevo la cadena binaria del mensaje a EDX
+
+   movq mm2,[one]
 
    .imageLoop:
 
-      mov bl,byte[esi]  ; Muevo a bl cada byte del mensaje para manipularlo
-      shr bl,1          ; Realizo un shift para conocer el valor del LSB
-      jc .one           ; Si el LSB es 1 la flag de carry se enciende y salto
-      jmp .zero
+      movq mm0,[esi]
+      movq mm1,[edx]
 
-      .one:
-         cmp byte[edx],1   ; Comparo para saber que valor hay en la cadena de bits
-         je .inc
-         and byte[esi],254 ; Realizo un AND lógico con 11111110 para colocar en 0 el LSB del byte actual
-         jmp .inc
+      psubusb mm0,mm2
+      por mm0,mm1
 
+      movq [esi],mm0
 
-      .zero:
-         cmp byte[edx],0   ; Comparo para saber que valor hay en la cadena de bits
-         je .inc
-         or byte[esi],1    ; Realizo un OR lógico con 00000001 para colocar en 1 el LSB del byte actual
-         jmp .inc
+      add esi,8
+      add edx,8
+
+      dec ecx
+      jnz .imageLoop
+      jmp createFile
 
 
-      .inc:
-         inc edx  ; Obtengo el siguiente bit de la cadena de binarios de mi mensaje
-         inc esi  ; Obtengo el siguiente byte de la imagen
-         dec ecx  ; Decremento el tamaño de la cadena para saber cuanto he recorrido
-         jnz .imageLoop
-         jmp createFile
 
 
 createFile:
