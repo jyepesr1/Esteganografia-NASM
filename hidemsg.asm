@@ -1,7 +1,5 @@
 %include    'functions.asm'
 
-%define sizeof(x) x %+ _size
-
 struc STAT
     .st_dev:        resd 1
     .st_ino:        resd 1
@@ -26,29 +24,31 @@ endstruc
 section .data
 
 numArgs           equ   6
-MSGError1         db    "Error el modo de uso es hidemsg 'mensaje' –f ARCHIVO.in –o \
+MSGError1         db    "Error, el modo de uso es hidemsg 'mensaje' –f ARCHIVO.in –o \
 ARCHIVO.out",0xa ; 0xa es salto de línea, 10 en ASCII decimal
 MSGError1Len      equ   $ - MSGError1  ; tamaño del mensaje
-MSGError2         db    "Error abriendo el archivo de entrada, por favor revise la \
+MSGError2         db    "Error, abriendo el archivo de entrada, por favor revise la \
 ruta y nombre de este.",0xa
 MSGError2Len      equ   $ - MSGError2  ; tamaño del mensaje
-MSGError3         db    "Error leyendo el archivo de entrada, por revise si dicho archivo.",0xa
+MSGError3         db    "Error, leyendo el archivo de entrada, por revise si dicho archivo.",0xa
 MSGError3Len      equ   $ - MSGError3  ; tamaño del mensaje
-
+MSGError4         db    "Error, el formato de la imagen de entrada no es P6",0xa
+MSGError4Len      equ   $ - MSGError4
 section .bss
 
-stat              resb  sizeof(STAT)
+;stat              resb  sizeof(STAT)
+stat              resb  64
 image             resb  5242880 ; 5MB
 imageName         resb  1024
 imageLen          resb  1024
 outFileName       resb  1024
 message           resb  1024
-messageLen        resb  1024
+messageLen        resb  2
 fd_in             resb  1
 fd_out            resb  1
 binary            resb  1024 ; Buffer para almacenar el char en binario
 binaryLen         resb  2    ; tamaño del buffer del binario
-header            resb  20   ; buffer para almacenar el header de la img
+header            resb  512   ; buffer para almacenar el header de la img
 headerLen         resb  2    ; tamaño del buffer del header
 bodyLen           resb  2    ; tamaño de la img sin el header
 
@@ -59,8 +59,8 @@ section .text
 _start:
    pop eax ; Obtiene el número de parametros
 
-  ; cmp eax, [numArgs] ; Compara la cantidad de parametros, deber ser igual a 6
-   ;jne errorParams
+   cmp eax, numArgs ; Compara la cantidad de parametros, deber ser igual a 6
+   jne errorParams
 
    pop eax ; Obtengo el nombre del programa
 
@@ -77,10 +77,10 @@ mensaje:
 
 
 parameter1:
-   pop ecx ; Obtengo la primer flag -f
+   pop ecx ; Obtengo la primer bandera -f
 
    mov eax,ecx
-   call strLen
+   call strLen ; calculo su longitud para hacer la comprobación de que este correcta dicha bandera
    cmp eax,2
    jne errorParams
 
@@ -108,10 +108,10 @@ parameter2:
 
 
 parameter3:
-   pop ecx
+   pop ecx ; Obtengo la segunda bandera -o
 
    mov eax,ecx
-   call strLen
+   call strLen ; calculo su longitud para hacer la comprobación de que este correcta dicha bandera
    cmp eax,2
    jne errorParams
 
@@ -152,12 +152,18 @@ parameter4:
    int 80h
 
 
+   cmp byte[image],'P'
+   jne errorFormat
+   cmp byte[image+1],'6'
+   jne errorFormat
+
+
 mov esi,[message]
 mov edi,binary
 mov eax,edi
 convert2Bits:
    cmp byte[esi],0 ; Comparo con 0 para saber si llegue al final del mensaje
-   je .finishedConvert
+   je .convertFinished
 
    mov bl,byte[esi] ; mueve un byte a bl para operar sobre este con shl
    call char2Bin
@@ -165,7 +171,7 @@ convert2Bits:
    inc esi ; obtengo el siguiente caracter del mensaje
    jmp convert2Bits
 
-   .finishedConvert:
+   .convertFinished:
       sub edi,eax ; Realizo una resta para conocer el tamaño final de la cadena de bits
       mov [binaryLen],edi
 
@@ -177,13 +183,13 @@ getHeader:
    mov edx,0  ; EDX es usado para al final saber el tamaño del Header
    .loop:
       cmp byte[ecx],10 ; Comparo con 10 para saber si he encontrado un "Fin de Línea"
-      je .linefeed
+      je .finDeLinea
 
       inc ecx   ; Obtengo el siguiente caracter
       inc edx   ; Incremento el tamaño
       jmp .loop
 
-   .linefeed:
+   .finDeLinea:
       inc esi   ; Incremento la cantidad de "Fin de Líneas" encontrados
       inc edx   ; Incremento el tamaño
       cmp esi,3 ; Comparo para saber si he encontrado 3 "Fin de Línea" y así sé que el Header acaba
@@ -203,7 +209,7 @@ changeImage:
    mov ecx,[binaryLen]
    mov edx,binary  ; Muevo la cadena binaria del mensaje a EDX
 
-   .loopImage:
+   .imageLoop:
 
       mov bl,byte[esi]  ; Muevo a bl cada byte del mensaje para manipularlo
       shr bl,1          ; Realizo un shift para conocer el valor del LSB
@@ -228,7 +234,7 @@ changeImage:
          inc edx  ; Obtengo el siguiente bit de la cadena de binarios de mi mensaje
          inc esi  ; Obtengo el siguiente byte de la imagen
          dec ecx  ; Decremento el tamaño de la cadena para saber cuanto he recorrido
-         jnz .loopImage
+         jnz .imageLoop
          jmp createFile
 
 

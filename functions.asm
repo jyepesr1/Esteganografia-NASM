@@ -12,14 +12,6 @@ strLen:
    ret
 
 
-
-;strCmp:
-;   cld ; Hace que la operación sea de izquierda a derecha
-;   repe cmpsb ; repite la operación mientras la flag ZF indique 0, o sea igual
-;   jecxz exit
-;   jmp errorParams
-
-
 char2Bin:
    mov ecx,7
    mov edx,edi ; Guardo la posición inicial del buffer
@@ -58,6 +50,15 @@ errorReadingFile:
    mov ebx,1 ; STDOUT - consola
    mov ecx,MSGError3
    mov edx,MSGError3Len
+   int 80h
+   jmp exit ; acabamos el programa
+
+
+errorFormat:
+   mov eax,4 ; Servicio sys_write() Imprimimos el Mensaje de Error
+   mov ebx,1 ; STDOUT - consola
+   mov ecx,MSGError4
+   mov edx,MSGError4Len
    int 80h
    jmp exit ; acabamos el programa
 
